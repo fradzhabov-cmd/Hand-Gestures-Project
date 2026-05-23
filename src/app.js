@@ -1,19 +1,18 @@
 import {
-  FilesetResolver,
-  HandLandmarker
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/+esm";
-
-import {
   analyzeHandGesture,
   Gesture,
   GESTURE_FILTERS,
   GESTURE_LABELS
 } from "./gestureClassifier.js";
 
+const MEDIAPIPE_TASKS_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/+esm";
 const HAND_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
+const TRACKER_LOAD_TIMEOUT_MS = 20000;
+const CLEAR_GESTURE_COOLDOWN_MS = 1200;
 const BAYER_MATRIX = [
   [0, 8, 2, 10],
   [12, 4, 14, 6],
@@ -46,50 +45,75 @@ const HAND_CONNECTIONS = [
 
 const video = document.querySelector("#camera");
 const canvas = document.querySelector("#feed");
+const drawingCanvas = document.querySelector("#drawing-layer");
 const ctx = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
+const drawingCtx = drawingCanvas.getContext("2d");
 const startButton = document.querySelector("#start-camera");
 const permissionPanel = document.querySelector("#permission-panel");
 const statusText = document.querySelector("#status");
 const gestureName = document.querySelector("#gesture-name");
 const filterName = document.querySelector("#filter-name");
 const trackingStatus = document.querySelector("#tracking-status");
+const modeTabs = document.querySelectorAll(".mode-tab");
+const drawControls = document.querySelector("#draw-controls");
+const colorChips = document.querySelectorAll(".color-chip");
+const clearDrawingButton = document.querySelector("#clear-drawing");
 const scratchCanvas = document.createElement("canvas");
 const scratchCtx = scratchCanvas.getContext("2d", { alpha: false });
 
 let handLandmarker;
+let trackerState = "idle";
 let running = false;
 let latestLandmarks = null;
+let latestAnalysis = null;
 let activeGesture = Gesture.UNKNOWN;
 let candidateGesture = Gesture.UNKNOWN;
 let candidateFrames = 0;
 let lastVideoTime = -1;
+let activeMode = "filters";
+let selectedColor = "#ffffff";
+let lastDrawPoint = null;
+let lastClearGestureAt = 0;
+let animationStarted = false;
 
 startButton.addEventListener("click", startExperience);
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("orientationchange", resizeCanvas);
+window.addEventListener("resize", resizeCanvases);
+window.addEventListener("orientationchange", resizeCanvases);
+clearDrawingButton.addEventListener("click", clearDrawing);
 
-resizeCanvas();
+for (const tab of modeTabs) {
+  tab.addEventListener("click", () => setMode(tab.dataset.mode));
+}
+
+for (const chip of colorChips) {
+  chip.addEventListener("click", () => setDrawingColor(chip.dataset.color));
+}
+
+resizeCanvases();
 updateHud(Gesture.UNKNOWN);
-updateTrackingStatus("Tracker starts after camera permission.");
+updateTrackingStatus("App v3 ready. Tap Start selfie camera.");
 
 async function startExperience() {
   startButton.disabled = true;
   setStatus("Opening selfie camera...");
+  updateTrackingStatus("Opening selfie camera...");
 
   try {
     await enterFullscreen();
     await startCamera();
-    setStatus("Loading MediaPipe hand tracker...");
-    handLandmarker = await createHandLandmarker();
-    updateTrackingStatus("Tracker ready. Show one hand in the frame.");
 
     running = true;
     permissionPanel.classList.add("is-hidden");
-    requestAnimationFrame(tick);
+    updateTrackingStatus("Camera is on. Loading MediaPipe hand tracker...");
+    setStatus("Camera started.");
+    startAnimationLoop();
+    loadHandTracker();
   } catch (error) {
     console.error(error);
     startButton.disabled = false;
-    setStatus(error.message || "Could not start the camera.");
+    const message = error.message || "Could not start the camera.";
+    setStatus(message);
+    updateTrackingStatus(message);
   }
 }
 
@@ -124,18 +148,51 @@ async function startCamera() {
   await video.play();
 }
 
-async function createHandLandmarker() {
-  const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+function startAnimationLoop() {
+  if (animationStarted) {
+    return;
+  }
+
+  animationStarted = true;
+  requestAnimationFrame(tick);
+}
+
+async function loadHandTracker() {
+  if (trackerState === "loading" || trackerState === "ready") {
+    return;
+  }
+
+  trackerState = "loading";
+  updateTrackingStatus("Loading MediaPipe hand tracker...");
 
   try {
-    return await createHandLandmarkerWithDelegate(vision, "GPU");
+    handLandmarker = await withTimeout(
+      createHandLandmarker(),
+      TRACKER_LOAD_TIMEOUT_MS,
+      "MediaPipe hand tracker took too long to load. Check your network/CDN access."
+    );
+    trackerState = "ready";
+    updateTrackingStatus("Tracker ready. Show one hand in the frame.");
   } catch (error) {
-    console.warn("GPU hand tracking failed; retrying with CPU delegate.", error);
-    return createHandLandmarkerWithDelegate(vision, "CPU");
+    console.error(error);
+    trackerState = "error";
+    updateTrackingStatus(error.message || "MediaPipe hand tracker failed to load.");
   }
 }
 
-function createHandLandmarkerWithDelegate(vision, delegate) {
+async function createHandLandmarker() {
+  const { FilesetResolver, HandLandmarker } = await import(MEDIAPIPE_TASKS_URL);
+  const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+
+  try {
+    return await createHandLandmarkerWithDelegate(HandLandmarker, vision, "GPU");
+  } catch (error) {
+    console.warn("GPU hand tracking failed; retrying with CPU delegate.", error);
+    return createHandLandmarkerWithDelegate(HandLandmarker, vision, "CPU");
+  }
+}
+
+function createHandLandmarkerWithDelegate(HandLandmarker, vision, delegate) {
   return HandLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: HAND_MODEL_URL,
@@ -143,9 +200,9 @@ function createHandLandmarkerWithDelegate(vision, delegate) {
     },
     numHands: 1,
     runningMode: "VIDEO",
-    minHandDetectionConfidence: 0.25,
-    minHandPresenceConfidence: 0.25,
-    minTrackingConfidence: 0.25
+    minHandDetectionConfidence: 0.2,
+    minHandPresenceConfidence: 0.2,
+    minTrackingConfidence: 0.2
   });
 }
 
@@ -164,13 +221,26 @@ function tick(now) {
     return;
   }
 
-  resizeCanvas();
+  resizeCanvases();
   updateLandmarks(now);
   drawScene(now);
   requestAnimationFrame(tick);
 }
 
 function updateLandmarks(now) {
+  if (trackerState === "loading") {
+    return;
+  }
+
+  if (trackerState === "error") {
+    latestLandmarks = null;
+    latestAnalysis = null;
+    activeGesture = Gesture.UNKNOWN;
+    updateHud(activeGesture);
+    lastDrawPoint = null;
+    return;
+  }
+
   if (!handLandmarker || !video.videoWidth || video.currentTime === lastVideoTime) {
     return;
   }
@@ -183,25 +253,29 @@ function updateLandmarks(now) {
   } catch (error) {
     console.error("Hand tracking failed.", error);
     latestLandmarks = null;
+    latestAnalysis = null;
     activeGesture = Gesture.UNKNOWN;
     updateHud(activeGesture);
     updateTrackingStatus("Hand tracking error. Refresh and try again.");
+    lastDrawPoint = null;
     return;
   }
 
   latestLandmarks = results.landmarks?.[0] ?? null;
 
   if (!latestLandmarks) {
+    latestAnalysis = null;
     activeGesture = stabilizeGesture(Gesture.UNKNOWN);
     updateHud(activeGesture);
     updateTrackingStatus("No hand detected. Hold one hand clearly in frame.");
+    lastDrawPoint = null;
     return;
   }
 
-  const analysis = analyzeHandGesture(latestLandmarks);
-  activeGesture = stabilizeGesture(analysis.gesture);
+  latestAnalysis = analyzeHandGesture(latestLandmarks);
+  activeGesture = stabilizeGesture(latestAnalysis.gesture);
   updateHud(activeGesture);
-  updateTrackingStatus(getTrackingMessage(analysis));
+  updateTrackingStatus(getTrackingMessage(latestAnalysis));
 }
 
 function stabilizeGesture(nextGesture) {
@@ -246,10 +320,16 @@ function drawScene(now) {
     ? landmarkToCanvasPoint(latestLandmarks[9], coverRect)
     : null;
 
-  applyGestureFilter(activeGesture, indexTip, palmCenter, now);
+  if (activeMode === "filters") {
+    applyGestureFilter(activeGesture, indexTip, palmCenter, now);
+  }
 
   if (latestLandmarks) {
     drawHandSkeleton(latestLandmarks, coverRect);
+  }
+
+  if (activeMode === "drawing" && latestAnalysis && latestLandmarks && indexTip) {
+    updateDrawing(indexTip, latestAnalysis, latestLandmarks);
   }
 
   if (indexTip) {
@@ -439,6 +519,73 @@ function applyWaterRipple(center, now) {
   ctx.restore();
 }
 
+function updateDrawing(indexTip, analysis, landmarks) {
+  if (isClearGesture(analysis, landmarks)) {
+    const now = Date.now();
+    if (now - lastClearGestureAt > CLEAR_GESTURE_COOLDOWN_MS) {
+      clearDrawing();
+      lastClearGestureAt = now;
+      updateTrackingStatus("Two-finger clear gesture detected. Drawing cleared.");
+    }
+    lastDrawPoint = null;
+    return;
+  }
+
+  const canDraw =
+    analysis.fingerStates.index &&
+    !analysis.fingerStates.middle &&
+    !analysis.fingerStates.ring &&
+    !analysis.fingerStates.pinky;
+
+  if (!canDraw) {
+    lastDrawPoint = null;
+    return;
+  }
+
+  drawingCtx.save();
+  drawingCtx.strokeStyle = selectedColor;
+  drawingCtx.lineWidth = Math.max(7, Math.min(drawingCanvas.width, drawingCanvas.height) * 0.012);
+  drawingCtx.lineCap = "round";
+  drawingCtx.lineJoin = "round";
+  drawingCtx.shadowColor = selectedColor;
+  drawingCtx.shadowBlur = drawingCtx.lineWidth * 0.45;
+  drawingCtx.beginPath();
+
+  if (lastDrawPoint && distanceBetweenPoints(lastDrawPoint, indexTip) < drawingCanvas.width * 0.18) {
+    drawingCtx.moveTo(lastDrawPoint.x, lastDrawPoint.y);
+  } else {
+    drawingCtx.moveTo(indexTip.x, indexTip.y);
+  }
+
+  drawingCtx.lineTo(indexTip.x, indexTip.y);
+  drawingCtx.stroke();
+  drawingCtx.restore();
+
+  lastDrawPoint = indexTip;
+}
+
+function isClearGesture(analysis, landmarks) {
+  if (
+    !analysis.fingerStates.index ||
+    !analysis.fingerStates.middle ||
+    analysis.fingerStates.ring ||
+    analysis.fingerStates.pinky
+  ) {
+    return false;
+  }
+
+  const palmSize = Math.max(distanceBetweenLandmarks(landmarks[0], landmarks[9]), 0.0001);
+  const horizontalSpread = Math.abs(landmarks[8].x - landmarks[12].x);
+  const verticalDifference = Math.abs(landmarks[8].y - landmarks[12].y);
+
+  return horizontalSpread > palmSize * 0.24 && verticalDifference < palmSize * 0.55;
+}
+
+function clearDrawing() {
+  drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+  lastDrawPoint = null;
+}
+
 function drawHandSkeleton(landmarks, rect) {
   const points = landmarks.map((landmark) => landmarkToCanvasPoint(landmark, rect));
   const lineWidth = Math.max(2, Math.min(canvas.width, canvas.height) * 0.004);
@@ -525,7 +672,7 @@ function getCoverRect(sourceWidth, sourceHeight, targetWidth, targetHeight) {
   };
 }
 
-function resizeCanvas() {
+function resizeCanvases() {
   const bounds = canvas.getBoundingClientRect();
   const ratio = Math.min(window.devicePixelRatio || 1, MAX_DEVICE_PIXEL_RATIO);
   const width = Math.max(1, Math.round(bounds.width * ratio));
@@ -534,6 +681,29 @@ function resizeCanvas() {
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
+  }
+
+  resizeDrawingCanvas(width, height);
+}
+
+function resizeDrawingCanvas(width, height) {
+  if (drawingCanvas.width === width && drawingCanvas.height === height) {
+    return;
+  }
+
+  const previous = document.createElement("canvas");
+  previous.width = drawingCanvas.width;
+  previous.height = drawingCanvas.height;
+
+  if (previous.width && previous.height) {
+    previous.getContext("2d").drawImage(drawingCanvas, 0, 0);
+  }
+
+  drawingCanvas.width = width;
+  drawingCanvas.height = height;
+
+  if (previous.width && previous.height) {
+    drawingCtx.drawImage(previous, 0, 0, width, height);
   }
 }
 
@@ -544,8 +714,41 @@ function syncScratchCanvas() {
   }
 }
 
+function setMode(mode) {
+  activeMode = mode === "drawing" ? "drawing" : "filters";
+  lastDrawPoint = null;
+
+  for (const tab of modeTabs) {
+    tab.classList.toggle("is-active", tab.dataset.mode === activeMode);
+  }
+
+  drawControls.hidden = activeMode !== "drawing";
+  updateHud(activeGesture);
+  updateTrackingStatus(
+    activeMode === "drawing"
+      ? "Drawing mode. Point one index finger to draw; show two spread fingers to clear."
+      : "Filter mode. Use fist, peace, pointing, or open hand."
+  );
+}
+
+function setDrawingColor(color) {
+  selectedColor = color || "#ffffff";
+
+  for (const chip of colorChips) {
+    chip.classList.toggle("is-active", chip.dataset.color === selectedColor);
+  }
+
+  updateHud(activeGesture);
+}
+
 function updateHud(gesture) {
   gestureName.textContent = GESTURE_LABELS[gesture] ?? GESTURE_LABELS.unknown;
+
+  if (activeMode === "drawing") {
+    filterName.textContent = `Drawing ${selectedColor}`;
+    return;
+  }
+
   filterName.textContent = GESTURE_FILTERS[gesture] ?? GESTURE_FILTERS.unknown;
 }
 
@@ -555,6 +758,16 @@ function getTrackingMessage(analysis) {
     .map(([finger]) => finger)
     .join(", ");
   const fingerSummary = fingers || "no extended fingers";
+
+  if (activeMode === "drawing") {
+    if (isClearGesture(analysis, latestLandmarks)) {
+      return "Two spread fingers detected. Drawing will clear.";
+    }
+
+    if (analysis.fingerStates.index && !analysis.fingerStates.middle) {
+      return `Drawing with ${selectedColor}. Extended: ${fingerSummary}.`;
+    }
+  }
 
   if (analysis.gesture === Gesture.UNKNOWN) {
     return `Hand detected. Extended: ${fingerSummary}. Adjust your gesture.`;
@@ -571,6 +784,26 @@ function setStatus(message) {
   statusText.textContent = message;
 }
 
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function distanceBetweenPoints(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function distanceBetweenLandmarks(a, b) {
+  const dx = (a.x ?? 0) - (b.x ?? 0);
+  const dy = (a.y ?? 0) - (b.y ?? 0);
+  const dz = (a.z ?? 0) - (b.z ?? 0);
+  return Math.hypot(dx, dy, dz);
 }

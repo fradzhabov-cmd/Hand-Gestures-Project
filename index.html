@@ -11,6 +11,7 @@
     <main class="stage" aria-label="Full-screen selfie camera with hand gesture filters">
       <video id="camera" class="camera" playsinline muted></video>
       <canvas id="feed" class="feed" aria-label="Filtered selfie camera feed"></canvas>
+      <canvas id="drawing-layer" class="drawing-layer" aria-label="Finger drawing layer"></canvas>
 
       <section id="permission-panel" class="permission-panel" aria-live="polite">
         <p class="eyebrow">MediaPipe Hands</p>
@@ -29,13 +30,30 @@
           <strong id="gesture-name">Waiting</strong>
         </div>
         <div>
-          <span class="hud-label">Filter</span>
-          <strong id="filter-name">None</strong>
+          <span class="hud-label">Mode</span>
+          <strong id="filter-name">Filters</strong>
         </div>
       </aside>
 
+      <nav class="mode-tabs" aria-label="Camera modes">
+        <button class="mode-tab is-active" type="button" data-mode="filters">Filters</button>
+        <button class="mode-tab" type="button" data-mode="drawing">Drawing</button>
+      </nav>
+
+      <section id="draw-controls" class="draw-controls" aria-label="Drawing controls" hidden>
+        <div class="color-palette" aria-label="Drawing colors">
+          <button class="color-chip is-active" type="button" data-color="#ffffff" style="--chip-color: #ffffff" aria-label="White"></button>
+          <button class="color-chip" type="button" data-color="#ff3b30" style="--chip-color: #ff3b30" aria-label="Red"></button>
+          <button class="color-chip" type="button" data-color="#34c759" style="--chip-color: #34c759" aria-label="Green"></button>
+          <button class="color-chip" type="button" data-color="#0a84ff" style="--chip-color: #0a84ff" aria-label="Blue"></button>
+          <button class="color-chip" type="button" data-color="#ffd60a" style="--chip-color: #ffd60a" aria-label="Yellow"></button>
+          <button class="color-chip" type="button" data-color="#bf5af2" style="--chip-color: #bf5af2" aria-label="Purple"></button>
+        </div>
+        <button id="clear-drawing" class="clear-drawing" type="button">Clear</button>
+      </section>
+
       <p id="tracking-status" class="tracking-status" aria-live="polite">
-        Tracker starts after camera permission.
+        App v3 loaded. Tap Start selfie camera.
       </p>
 
       <section class="legend" aria-label="Gesture to filter map">

@@ -48,14 +48,23 @@ select {
   pointer-events: none;
 }
 
-.feed {
+.feed,
+.drawing-layer {
   position: absolute;
   inset: 0;
   display: block;
   width: 100vw;
   height: 100vh;
   height: 100dvh;
+}
+
+.feed {
   background: #050505;
+}
+
+.drawing-layer {
+  z-index: 1;
+  pointer-events: none;
 }
 
 .permission-panel {
@@ -128,9 +137,11 @@ h1 {
 }
 
 .hud,
+.mode-tabs,
+.draw-controls,
 .legend {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   left: max(1rem, env(safe-area-inset-left));
   right: max(1rem, env(safe-area-inset-right));
   display: flex;
@@ -176,9 +187,94 @@ h1 {
   white-space: nowrap;
 }
 
+
+.mode-tabs {
+  top: calc(max(1rem, env(safe-area-inset-top)) + 5rem);
+  left: 50%;
+  right: auto;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(5, 5, 5, 0.5);
+  box-shadow: 0 0.85rem 2.5rem rgba(0, 0, 0, 0.22);
+  transform: translateX(-50%);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 0.62rem 0.8rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mode-tab.is-active {
+  background: #fff;
+  color: #08080a;
+}
+
+.draw-controls {
+  left: 50%;
+  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 6.8rem);
+  right: auto;
+  width: min(34rem, calc(100vw - 2rem));
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(5, 5, 5, 0.5);
+  box-shadow: 0 0.85rem 2.5rem rgba(0, 0, 0, 0.22);
+  transform: translateX(-50%);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.draw-controls[hidden] {
+  display: none;
+}
+
+.color-palette {
+  display: flex;
+  gap: 0.42rem;
+}
+
+.color-chip {
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 2px solid rgba(255, 255, 255, 0.58);
+  border-radius: 50%;
+  background: var(--chip-color);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+
+.color-chip.is-active {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.55),
+    0 0 0 5px rgba(255, 255, 255, 0.45);
+}
+
+.clear-drawing {
+  padding: 0.58rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #08080a;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .tracking-status {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   left: 50%;
   bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.2rem);
   width: min(34rem, calc(100vw - 2rem));
