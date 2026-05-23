@@ -15,6 +15,8 @@ gestures to live visual filters on the camera feed.
   - Pointing index finger -> spotlight filter
   - Open hand -> water ripple filter
 - Mobile safe-area aware controls and heads-up gesture/filter display
+- Drawing tab with fingertip drawing, color choices, manual clear, and two-finger gesture clear
+- Runtime tracker diagnostics that show camera/model loading, no-hand state, detected fingers, or model errors
 
 ## Run locally
 
@@ -27,6 +29,12 @@ npm start
 
 Open the printed local URL on a phone or browser. Camera APIs require HTTPS in
 production; `localhost` is allowed for local development.
+
+## Drawing mode
+
+Open the **Drawing** tab after starting the camera. Point with one index
+finger to draw over the live selfie feed. Pick a color from the palette, tap
+**Clear**, or show two spread fingers to clear the drawing by gesture.
 
 ## Tests
 
