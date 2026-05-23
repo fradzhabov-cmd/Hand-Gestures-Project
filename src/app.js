@@ -12,7 +12,8 @@ const HAND_MODEL_URL =
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const TRACKER_LOAD_TIMEOUT_MS = 20000;
-const CLEAR_GESTURE_COOLDOWN_MS = 1200;
+const ERASER_GESTURE_COOLDOWN_MS = 80;
+const ERASER_RADIUS_SCALE = 0.035;
 const LANDMARK_HOLD_MS = 450;
 const TRACKING_MAX_WIDTH = 640;
 const BAYER_MATRIX = [
@@ -62,6 +63,7 @@ const modeTabs = document.querySelectorAll(".mode-tab");
 const drawControls = document.querySelector("#draw-controls");
 const colorChips = document.querySelectorAll(".color-chip");
 const clearDrawingButton = document.querySelector("#clear-drawing");
+const whiteboardToggle = document.querySelector("#whiteboard-toggle");
 const scratchCanvas = document.createElement("canvas");
 const scratchCtx = scratchCanvas.getContext("2d", { alpha: false });
 
@@ -78,15 +80,18 @@ let candidateGesture = Gesture.UNKNOWN;
 let candidateFrames = 0;
 let lastVideoTime = -1;
 let activeMode = "filters";
-let selectedColor = "#ffffff";
+let selectedColor = "#34c759";
 let lastDrawPoint = null;
-let lastClearGestureAt = 0;
+let lastErasePoint = null;
+let lastEraseGestureAt = 0;
+let whiteboardMode = false;
 let animationStarted = false;
 
 startButton.addEventListener("click", startExperience);
 window.addEventListener("resize", resizeCanvases);
 window.addEventListener("orientationchange", resizeCanvases);
 clearDrawingButton.addEventListener("click", clearDrawing);
+whiteboardToggle.addEventListener("click", toggleWhiteboardMode);
 
 for (const tab of modeTabs) {
   tab.addEventListener("click", () => setMode(tab.dataset.mode));
@@ -378,10 +383,17 @@ function drawScene(now) {
     canvas.height
   );
 
-  drawMirroredVideo(coverRect);
+  if (activeMode === "drawing" && whiteboardMode) {
+    drawWhiteboardBackground();
+  } else {
+    drawMirroredVideo(coverRect);
+  }
 
   const indexTip = latestLandmarks
     ? landmarkToCanvasPoint(latestLandmarks[8], coverRect)
+    : null;
+  const middleTip = latestLandmarks
+    ? landmarkToCanvasPoint(latestLandmarks[12], coverRect)
     : null;
   const palmCenter = latestLandmarks
     ? landmarkToCanvasPoint(latestLandmarks[9], coverRect)
@@ -396,12 +408,37 @@ function drawScene(now) {
   }
 
   if (activeMode === "drawing" && latestAnalysis && latestLandmarks && indexTip) {
-    updateDrawing(indexTip, latestAnalysis, latestLandmarks);
+    updateDrawing(indexTip, middleTip, latestAnalysis, latestLandmarks);
   }
 
   if (indexTip) {
     drawIndexDot(indexTip);
   }
+}
+
+function drawWhiteboardBackground() {
+  ctx.save();
+  ctx.fillStyle = "#f8faf7";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "rgba(5, 40, 20, 0.06)";
+  ctx.lineWidth = 1;
+  const gridSize = Math.max(28, Math.min(canvas.width, canvas.height) * 0.045);
+
+  for (let x = 0; x < canvas.width; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+
+  for (let y = 0; y < canvas.height; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }
 
 function drawMirroredVideo(rect) {
@@ -586,13 +623,13 @@ function applyWaterRipple(center, now) {
   ctx.restore();
 }
 
-function updateDrawing(indexTip, analysis, landmarks) {
-  if (isClearGesture(analysis, landmarks)) {
+function updateDrawing(indexTip, middleTip, analysis, landmarks) {
+  if (isEraserGesture(analysis, landmarks) && middleTip) {
     const now = Date.now();
-    if (now - lastClearGestureAt > CLEAR_GESTURE_COOLDOWN_MS) {
-      clearDrawing();
-      lastClearGestureAt = now;
-      updateTrackingStatus("Two-finger clear gesture detected. Drawing cleared.");
+    if (now - lastEraseGestureAt > ERASER_GESTURE_COOLDOWN_MS) {
+      eraseDrawingAt(indexTip, middleTip);
+      lastEraseGestureAt = now;
+      updateTrackingStatus("Eraser active. Move two fingers over the area to erase.");
     }
     lastDrawPoint = null;
     return;
@@ -600,6 +637,7 @@ function updateDrawing(indexTip, analysis, landmarks) {
 
   const canDraw =
     analysis.fingerStates.index &&
+    !analysis.fingerStates.middle &&
     !analysis.fingerStates.ring &&
     !analysis.fingerStates.pinky;
 
@@ -609,6 +647,7 @@ function updateDrawing(indexTip, analysis, landmarks) {
   }
 
   drawingCtx.save();
+  drawingCtx.globalCompositeOperation = "source-over";
   drawingCtx.strokeStyle = selectedColor;
   drawingCtx.lineWidth = Math.max(7, Math.min(drawingCanvas.width, drawingCanvas.height) * 0.012);
   drawingCtx.lineCap = "round";
@@ -628,9 +667,10 @@ function updateDrawing(indexTip, analysis, landmarks) {
   drawingCtx.restore();
 
   lastDrawPoint = indexTip;
+  lastErasePoint = null;
 }
 
-function isClearGesture(analysis, landmarks) {
+function isEraserGesture(analysis, landmarks) {
   if (
     !analysis.fingerStates.index ||
     !analysis.fingerStates.middle ||
@@ -644,12 +684,43 @@ function isClearGesture(analysis, landmarks) {
   const horizontalSpread = Math.abs(landmarks[8].x - landmarks[12].x);
   const verticalDifference = Math.abs(landmarks[8].y - landmarks[12].y);
 
-  return horizontalSpread > palmSize * 0.24 && verticalDifference < palmSize * 0.55;
+  return horizontalSpread > palmSize * 0.18 && verticalDifference < palmSize * 0.65;
+}
+
+function eraseDrawingAt(indexTip, middleTip) {
+  const eraserPoint = {
+    x: (indexTip.x + middleTip.x) / 2,
+    y: (indexTip.y + middleTip.y) / 2
+  };
+  const radius = Math.max(18, Math.min(drawingCanvas.width, drawingCanvas.height) * ERASER_RADIUS_SCALE);
+
+  drawingCtx.save();
+  drawingCtx.globalCompositeOperation = "destination-out";
+  drawingCtx.lineCap = "round";
+  drawingCtx.lineJoin = "round";
+  drawingCtx.lineWidth = radius * 2;
+  drawingCtx.beginPath();
+
+  if (lastErasePoint && distanceBetweenPoints(lastErasePoint, eraserPoint) < drawingCanvas.width * 0.25) {
+    drawingCtx.moveTo(lastErasePoint.x, lastErasePoint.y);
+  } else {
+    drawingCtx.moveTo(eraserPoint.x, eraserPoint.y);
+  }
+
+  drawingCtx.lineTo(eraserPoint.x, eraserPoint.y);
+  drawingCtx.stroke();
+  drawingCtx.beginPath();
+  drawingCtx.arc(eraserPoint.x, eraserPoint.y, radius, 0, Math.PI * 2);
+  drawingCtx.fill();
+  drawingCtx.restore();
+
+  lastErasePoint = eraserPoint;
 }
 
 function clearDrawing() {
   drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
   lastDrawPoint = null;
+  lastErasePoint = null;
 }
 
 function drawHandSkeleton(landmarks, rect) {
@@ -783,6 +854,7 @@ function syncScratchCanvas() {
 function setMode(mode) {
   activeMode = mode === "drawing" ? "drawing" : "filters";
   lastDrawPoint = null;
+  lastErasePoint = null;
 
   for (const tab of modeTabs) {
     tab.classList.toggle("is-active", tab.dataset.mode === activeMode);
@@ -792,13 +864,24 @@ function setMode(mode) {
   updateHud(activeGesture);
   updateTrackingStatus(
     activeMode === "drawing"
-      ? "Drawing mode. Point one index finger to draw; show two spread fingers to clear."
+      ? "Drawing mode. One index finger draws; two spread fingers erase locally."
       : "Filter mode. Use fist, peace, pointing, or open hand."
   );
 }
 
+function toggleWhiteboardMode() {
+  whiteboardMode = !whiteboardMode;
+  whiteboardToggle.classList.toggle("is-active", whiteboardMode);
+  whiteboardToggle.setAttribute("aria-pressed", String(whiteboardMode));
+  updateTrackingStatus(
+    whiteboardMode
+      ? "Whiteboard mode on. Camera still tracks your finger behind the whiteboard."
+      : "Whiteboard mode off. Drawing over live camera feed."
+  );
+}
+
 function setDrawingColor(color) {
-  selectedColor = color || "#ffffff";
+  selectedColor = color || "#34c759";
 
   for (const chip of colorChips) {
     chip.classList.toggle("is-active", chip.dataset.color === selectedColor);
@@ -811,7 +894,7 @@ function updateHud(gesture) {
   gestureName.textContent = GESTURE_LABELS[gesture] ?? GESTURE_LABELS.unknown;
 
   if (activeMode === "drawing") {
-    filterName.textContent = `Drawing ${selectedColor}`;
+    filterName.textContent = whiteboardMode ? "Whiteboard" : `Drawing ${selectedColor}`;
     return;
   }
 
@@ -826,11 +909,11 @@ function getTrackingMessage(analysis) {
   const fingerSummary = fingers || "no extended fingers";
 
   if (activeMode === "drawing") {
-    if (isClearGesture(analysis, latestLandmarks)) {
-      return "Two spread fingers detected. Drawing will clear.";
+    if (isEraserGesture(analysis, latestLandmarks)) {
+      return "Eraser ready. Move two spread fingers over the area to erase.";
     }
 
-    if (analysis.fingerStates.index) {
+    if (analysis.fingerStates.index && !analysis.fingerStates.middle) {
       return `Drawing with ${selectedColor}. Extended: ${fingerSummary}.`;
     }
   }

@@ -15,7 +15,7 @@ gestures to live visual filters on the camera feed.
   - Pointing index finger -> spotlight filter
   - Open hand -> water ripple filter
 - Mobile safe-area aware controls and heads-up gesture/filter display
-- Drawing tab with fingertip drawing, color choices, manual clear, and two-finger gesture clear
+- Drawing tab with persistent fingertip strokes, green default ink, color choices, manual clear, local two-finger erasing, and whiteboard mode
 - Runtime tracker diagnostics that show camera/model loading, no-hand state, detected fingers, or model errors
 - High-sensitivity tracking with an enhanced offscreen camera frame and brief landmark lock to reduce first-try flicker
 
@@ -34,8 +34,13 @@ production; `localhost` is allowed for local development.
 ## Drawing mode
 
 Open the **Drawing** tab after starting the camera. Point with one index
-finger to draw over the live selfie feed. Pick a color from the palette, tap
-**Clear**, or show two spread fingers to clear the drawing by gesture.
+finger to draw persistent strokes over the live selfie feed. Green is the
+default ink color, and you can pick another color from the palette.
+
+Use two spread fingers as a local eraser: move the two fingertips over the
+area you want to remove. Tap **Clear** to wipe all drawing. Toggle
+**Whiteboard** to draw on a blank whiteboard while the camera continues to
+track your finger in the background.
 
 ## Tests
 
