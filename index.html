@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#050505">
+    <title>MediaPipe Hand Filters</title>
+    <link rel="stylesheet" href="./src/styles.css">
+  </head>
+  <body>
+    <main class="stage" aria-label="Full-screen selfie camera with hand gesture filters">
+      <video id="camera" class="camera" playsinline muted></video>
+      <canvas id="feed" class="feed" aria-label="Filtered selfie camera feed"></canvas>
+
+      <section id="permission-panel" class="permission-panel" aria-live="polite">
+        <p class="eyebrow">MediaPipe Hands</p>
+        <h1>Gesture camera filters</h1>
+        <p>
+          Open the selfie camera full-screen, then hold up one hand. A white dot
+          tracks your index fingertip and gestures switch filters live.
+        </p>
+        <button id="start-camera" type="button">Start selfie camera</button>
+        <p id="status" class="status">Camera permission is required.</p>
+      </section>
+
+      <aside class="hud" aria-live="polite">
+        <div>
+          <span class="hud-label">Gesture</span>
+          <strong id="gesture-name">Waiting</strong>
+        </div>
+        <div>
+          <span class="hud-label">Filter</span>
+          <strong id="filter-name">None</strong>
+        </div>
+      </aside>
+
+      <section class="legend" aria-label="Gesture to filter map">
+        <span>Fist: dither</span>
+        <span>Peach sign: VHS</span>
+        <span>Point: spotlight</span>
+        <span>Open hand: water ripple</span>
+      </section>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
