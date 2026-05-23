@@ -17,6 +17,7 @@ gestures to live visual filters on the camera feed.
 - Mobile safe-area aware controls and heads-up gesture/filter display
 - Drawing tab with fingertip drawing, color choices, manual clear, and two-finger gesture clear
 - Runtime tracker diagnostics that show camera/model loading, no-hand state, detected fingers, or model errors
+- High-sensitivity tracking with an enhanced offscreen camera frame and brief landmark lock to reduce first-try flicker
 
 ## Run locally
 

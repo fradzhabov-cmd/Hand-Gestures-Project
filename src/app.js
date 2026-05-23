@@ -13,6 +13,8 @@ const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wa
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const TRACKER_LOAD_TIMEOUT_MS = 20000;
 const CLEAR_GESTURE_COOLDOWN_MS = 1200;
+const LANDMARK_HOLD_MS = 450;
+const TRACKING_MAX_WIDTH = 640;
 const BAYER_MATRIX = [
   [0, 8, 2, 10],
   [12, 4, 14, 6],
@@ -46,8 +48,10 @@ const HAND_CONNECTIONS = [
 const video = document.querySelector("#camera");
 const canvas = document.querySelector("#feed");
 const drawingCanvas = document.querySelector("#drawing-layer");
+const trackingCanvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
 const drawingCtx = drawingCanvas.getContext("2d");
+const trackingCtx = trackingCanvas.getContext("2d", { alpha: false, willReadFrequently: true });
 const startButton = document.querySelector("#start-camera");
 const permissionPanel = document.querySelector("#permission-panel");
 const statusText = document.querySelector("#status");
@@ -66,6 +70,9 @@ let trackerState = "idle";
 let running = false;
 let latestLandmarks = null;
 let latestAnalysis = null;
+let lastGoodLandmarks = null;
+let lastGoodAnalysis = null;
+let lastGoodLandmarksAt = -Infinity;
 let activeGesture = Gesture.UNKNOWN;
 let candidateGesture = Gesture.UNKNOWN;
 let candidateFrames = 0;
@@ -198,11 +205,11 @@ function createHandLandmarkerWithDelegate(HandLandmarker, vision, delegate) {
       modelAssetPath: HAND_MODEL_URL,
       delegate
     },
-    numHands: 1,
+    numHands: 2,
     runningMode: "VIDEO",
-    minHandDetectionConfidence: 0.2,
-    minHandPresenceConfidence: 0.2,
-    minTrackingConfidence: 0.2
+    minHandDetectionConfidence: 0.05,
+    minHandPresenceConfidence: 0.05,
+    minTrackingConfidence: 0.05
   });
 }
 
@@ -249,7 +256,8 @@ function updateLandmarks(now) {
 
   let results;
   try {
-    results = handLandmarker.detectForVideo(video, now);
+    const trackingInput = prepareTrackingFrame();
+    results = handLandmarker.detectForVideo(trackingInput, now);
   } catch (error) {
     console.error("Hand tracking failed.", error);
     latestLandmarks = null;
@@ -261,21 +269,80 @@ function updateLandmarks(now) {
     return;
   }
 
-  latestLandmarks = results.landmarks?.[0] ?? null;
+  const detectedLandmarks = pickLargestHand(results.landmarks);
 
-  if (!latestLandmarks) {
+  if (!detectedLandmarks) {
+    if (lastGoodLandmarks && now - lastGoodLandmarksAt < LANDMARK_HOLD_MS) {
+      latestLandmarks = lastGoodLandmarks;
+      latestAnalysis = lastGoodAnalysis;
+      activeGesture = stabilizeGesture(latestAnalysis.gesture);
+      updateHud(activeGesture);
+      updateTrackingStatus(`Keeping hand lock briefly. ${getTrackingMessage(latestAnalysis)}`);
+      return;
+    }
+
+    latestLandmarks = null;
     latestAnalysis = null;
     activeGesture = stabilizeGesture(Gesture.UNKNOWN);
     updateHud(activeGesture);
-    updateTrackingStatus("No hand detected. Hold one hand clearly in frame.");
+    updateTrackingStatus("No hand detected. Try filling the center of the screen with your palm/finger.");
     lastDrawPoint = null;
     return;
   }
 
+  latestLandmarks = cloneLandmarks(detectedLandmarks);
   latestAnalysis = analyzeHandGesture(latestLandmarks);
+  lastGoodLandmarks = latestLandmarks;
+  lastGoodAnalysis = latestAnalysis;
+  lastGoodLandmarksAt = now;
   activeGesture = stabilizeGesture(latestAnalysis.gesture);
   updateHud(activeGesture);
   updateTrackingStatus(getTrackingMessage(latestAnalysis));
+}
+
+function prepareTrackingFrame() {
+  const width = Math.min(TRACKING_MAX_WIDTH, video.videoWidth);
+  const height = Math.max(1, Math.round(width * (video.videoHeight / video.videoWidth)));
+
+  if (trackingCanvas.width !== width || trackingCanvas.height !== height) {
+    trackingCanvas.width = width;
+    trackingCanvas.height = height;
+  }
+
+  trackingCtx.save();
+  trackingCtx.filter = "brightness(1.45) contrast(1.35) saturate(1.15)";
+  trackingCtx.drawImage(video, 0, 0, width, height);
+  trackingCtx.restore();
+
+  return trackingCanvas;
+}
+
+function pickLargestHand(hands) {
+  if (!Array.isArray(hands) || hands.length === 0) {
+    return null;
+  }
+
+  return hands.reduce((largest, hand) => {
+    if (!largest || getHandArea(hand) > getHandArea(largest)) {
+      return hand;
+    }
+
+    return largest;
+  }, null);
+}
+
+function getHandArea(landmarks) {
+  const xs = landmarks.map((landmark) => landmark.x);
+  const ys = landmarks.map((landmark) => landmark.y);
+  return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+}
+
+function cloneLandmarks(landmarks) {
+  return landmarks.map((landmark) => ({
+    x: landmark.x,
+    y: landmark.y,
+    z: landmark.z ?? 0
+  }));
 }
 
 function stabilizeGesture(nextGesture) {
@@ -533,7 +600,6 @@ function updateDrawing(indexTip, analysis, landmarks) {
 
   const canDraw =
     analysis.fingerStates.index &&
-    !analysis.fingerStates.middle &&
     !analysis.fingerStates.ring &&
     !analysis.fingerStates.pinky;
 
@@ -764,7 +830,7 @@ function getTrackingMessage(analysis) {
       return "Two spread fingers detected. Drawing will clear.";
     }
 
-    if (analysis.fingerStates.index && !analysis.fingerStates.middle) {
+    if (analysis.fingerStates.index) {
       return `Drawing with ${selectedColor}. Extended: ${fingerSummary}.`;
     }
   }
