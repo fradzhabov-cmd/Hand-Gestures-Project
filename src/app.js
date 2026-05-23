@@ -259,10 +259,9 @@ function updateLandmarks(now) {
 
   lastVideoTime = video.currentTime;
 
-  let results;
+  let detectedLandmarks;
   try {
-    const trackingInput = prepareTrackingFrame();
-    results = handLandmarker.detectForVideo(trackingInput, now);
+    detectedLandmarks = detectBestHand(now);
   } catch (error) {
     console.error("Hand tracking failed.", error);
     latestLandmarks = null;
@@ -273,8 +272,6 @@ function updateLandmarks(now) {
     lastDrawPoint = null;
     return;
   }
-
-  const detectedLandmarks = pickLargestHand(results.landmarks);
 
   if (!detectedLandmarks) {
     if (lastGoodLandmarks && now - lastGoodLandmarksAt < LANDMARK_HOLD_MS) {
@@ -303,6 +300,19 @@ function updateLandmarks(now) {
   activeGesture = stabilizeGesture(latestAnalysis.gesture);
   updateHud(activeGesture);
   updateTrackingStatus(getTrackingMessage(latestAnalysis));
+}
+
+function detectBestHand(now) {
+  const rawResults = handLandmarker.detectForVideo(video, now);
+  const rawHand = pickLargestHand(rawResults.landmarks);
+
+  if (rawHand) {
+    return rawHand;
+  }
+
+  const trackingInput = prepareTrackingFrame();
+  const enhancedResults = handLandmarker.detectForVideo(trackingInput, now + 0.01);
+  return pickLargestHand(enhancedResults.landmarks);
 }
 
 function prepareTrackingFrame() {

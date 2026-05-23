@@ -38,6 +38,16 @@ test("classifies a pointing index finger", () => {
   assert.equal(classifyHandGesture(landmarks), Gesture.POINTING_FINGER);
 });
 
+test("classifies a tilted pointing index finger", () => {
+  const landmarks = rotateHand(
+    makeHand({ gesture: Gesture.POINTING_FINGER }),
+    { x: 0.5, y: 0.7 },
+    Math.PI / 3
+  );
+
+  assert.equal(classifyHandGesture(landmarks), Gesture.POINTING_FINGER);
+});
+
 test("classifies an open hand when all fingers are extended", () => {
   const landmarks = makeHand({ gesture: Gesture.OPEN_HAND });
 
@@ -102,6 +112,23 @@ function setFinger(landmarks, indices, x, extended) {
   landmarks[pip] = point(x, 0.72);
   landmarks[dip] = point(x + 0.03, 0.78);
   landmarks[tip] = point(x + 0.05, 0.73);
+}
+
+function rotateHand(landmarks, center, radians) {
+  return landmarks.map((landmark) => rotatePoint(landmark, center, radians));
+}
+
+function rotatePoint(source, center, radians) {
+  const dx = source.x - center.x;
+  const dy = source.y - center.y;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+    z: source.z
+  };
 }
 
 function point(x, y, z = 0) {
