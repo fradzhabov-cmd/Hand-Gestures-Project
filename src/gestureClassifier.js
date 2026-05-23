@@ -52,14 +52,12 @@ export function analyzeHandGesture(landmarks) {
   }
 
   const fingerStates = getFingerStates(landmarks);
-  const extendedFingers = countExtended(fingerStates);
 
   if (
     fingerStates.index &&
     fingerStates.middle &&
     fingerStates.ring &&
-    fingerStates.pinky &&
-    fingerStates.thumb
+    fingerStates.pinky
   ) {
     return {
       gesture: Gesture.OPEN_HAND,
@@ -99,8 +97,7 @@ export function analyzeHandGesture(landmarks) {
     !fingerStates.index &&
     !fingerStates.middle &&
     !fingerStates.ring &&
-    !fingerStates.pinky &&
-    extendedFingers <= 1
+    !fingerStates.pinky
   ) {
     return {
       gesture: Gesture.FIST,
@@ -132,10 +129,6 @@ export function getFingerStates(landmarks) {
   };
 }
 
-function countExtended(fingerStates) {
-  return Object.values(fingerStates).filter(Boolean).length;
-}
-
 function isFingerExtended(landmarks, indices, palmSize) {
   const [mcpIndex, pipIndex, dipIndex, tipIndex] = indices;
   const wrist = landmarks[0];
@@ -146,10 +139,13 @@ function isFingerExtended(landmarks, indices, palmSize) {
   const fingerLength =
     distance(mcp, pip) + distance(pip, dip) + distance(dip, tip);
   const straightness = distance(mcp, tip) / Math.max(fingerLength, 0.0001);
-  const reachesAwayFromPalm =
-    distance(wrist, tip) > distance(wrist, pip) + palmSize * 0.08;
+  const extendsBeyondKnuckle =
+    distance(wrist, tip) > distance(wrist, mcp) + palmSize * 0.16;
+  const extendsBeyondMiddleJoint =
+    distance(wrist, tip) > distance(wrist, pip) + palmSize * 0.02;
+  const reachesAwayFromPalm = extendsBeyondKnuckle && extendsBeyondMiddleJoint;
 
-  return straightness > 0.78 && reachesAwayFromPalm;
+  return straightness > 0.62 && reachesAwayFromPalm;
 }
 
 function isThumbExtended(landmarks, palmSize) {
@@ -162,10 +158,10 @@ function isThumbExtended(landmarks, palmSize) {
     distance(cmc, mcp) + distance(mcp, ip) + distance(ip, tip);
   const straightness = distance(cmc, tip) / Math.max(fingerLength, 0.0001);
   const awayFromPalm =
-    distance(tip, landmarks[5]) > palmSize * 0.62 &&
-    distance(wrist, tip) > distance(wrist, ip) + palmSize * 0.02;
+    distance(tip, landmarks[5]) > palmSize * 0.45 &&
+    distance(wrist, tip) > distance(wrist, mcp) + palmSize * 0.08;
 
-  return straightness > 0.72 && awayFromPalm;
+  return straightness > 0.58 && awayFromPalm;
 }
 
 function hasVSignSeparation(landmarks) {

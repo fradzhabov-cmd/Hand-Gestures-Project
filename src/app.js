@@ -29,6 +29,7 @@ const permissionPanel = document.querySelector("#permission-panel");
 const statusText = document.querySelector("#status");
 const gestureName = document.querySelector("#gesture-name");
 const filterName = document.querySelector("#filter-name");
+const trackingStatus = document.querySelector("#tracking-status");
 const scratchCanvas = document.createElement("canvas");
 const scratchCtx = scratchCanvas.getContext("2d", { alpha: false });
 
@@ -46,6 +47,7 @@ window.addEventListener("orientationchange", resizeCanvas);
 
 resizeCanvas();
 updateHud(Gesture.UNKNOWN);
+updateTrackingStatus("Tracker starts after camera permission.");
 
 async function startExperience() {
   startButton.disabled = true;
@@ -56,6 +58,7 @@ async function startExperience() {
     await startCamera();
     setStatus("Loading MediaPipe hand tracker...");
     handLandmarker = await createHandLandmarker();
+    updateTrackingStatus("Tracker ready. Show one hand in the frame.");
 
     running = true;
     permissionPanel.classList.add("is-hidden");
@@ -102,7 +105,7 @@ async function createHandLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
   try {
-    return createHandLandmarkerWithDelegate(vision, "GPU");
+    return await createHandLandmarkerWithDelegate(vision, "GPU");
   } catch (error) {
     console.warn("GPU hand tracking failed; retrying with CPU delegate.", error);
     return createHandLandmarkerWithDelegate(vision, "CPU");
@@ -150,15 +153,32 @@ function updateLandmarks(now) {
   }
 
   lastVideoTime = video.currentTime;
-  const results = handLandmarker.detectForVideo(video, now);
+
+  let results;
+  try {
+    results = handLandmarker.detectForVideo(video, now);
+  } catch (error) {
+    console.error("Hand tracking failed.", error);
+    latestLandmarks = null;
+    activeGesture = Gesture.UNKNOWN;
+    updateHud(activeGesture);
+    updateTrackingStatus("Hand tracking error. Refresh and try again.");
+    return;
+  }
+
   latestLandmarks = results.landmarks?.[0] ?? null;
 
-  const nextGesture = latestLandmarks
-    ? analyzeHandGesture(latestLandmarks).gesture
-    : Gesture.UNKNOWN;
+  if (!latestLandmarks) {
+    activeGesture = stabilizeGesture(Gesture.UNKNOWN);
+    updateHud(activeGesture);
+    updateTrackingStatus("No hand detected. Hold one hand clearly in frame.");
+    return;
+  }
 
-  activeGesture = stabilizeGesture(nextGesture);
+  const analysis = analyzeHandGesture(latestLandmarks);
+  activeGesture = stabilizeGesture(analysis.gesture);
   updateHud(activeGesture);
+  updateTrackingStatus(getTrackingMessage(analysis));
 }
 
 function stabilizeGesture(nextGesture) {
@@ -467,6 +487,24 @@ function syncScratchCanvas() {
 function updateHud(gesture) {
   gestureName.textContent = GESTURE_LABELS[gesture] ?? GESTURE_LABELS.unknown;
   filterName.textContent = GESTURE_FILTERS[gesture] ?? GESTURE_FILTERS.unknown;
+}
+
+function getTrackingMessage(analysis) {
+  const fingers = Object.entries(analysis.fingerStates)
+    .filter(([, extended]) => extended)
+    .map(([finger]) => finger)
+    .join(", ");
+  const fingerSummary = fingers || "no extended fingers";
+
+  if (analysis.gesture === Gesture.UNKNOWN) {
+    return `Hand detected. Extended: ${fingerSummary}. Adjust your gesture.`;
+  }
+
+  return `${GESTURE_LABELS[analysis.gesture]} detected. Extended: ${fingerSummary}.`;
+}
+
+function updateTrackingStatus(message) {
+  trackingStatus.textContent = message;
 }
 
 function setStatus(message) {

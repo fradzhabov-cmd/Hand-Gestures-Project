@@ -176,6 +176,26 @@ h1 {
   white-space: nowrap;
 }
 
+.tracking-status {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.2rem);
+  width: min(34rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(5, 5, 5, 0.5);
+  box-shadow: 0 0.85rem 2.5rem rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: clamp(0.72rem, 3.1vw, 0.9rem);
+  text-align: center;
+  transform: translateX(-50%);
+  backdrop-filter: blur(16px);
+  pointer-events: none;
+}
+
 .legend {
   bottom: max(1rem, env(safe-area-inset-bottom));
   flex-wrap: wrap;
