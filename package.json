@@ -1,0 +1,18 @@
+{
+  "name": "hand-gesture-camera-filters",
+  "version": "1.0.0",
+  "description": "Mobile selfie camera app with MediaPipe hand gesture filters.",
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve .",
+    "test": "node --test"
+  },
+  "keywords": [
+    "mediapipe",
+    "hands",
+    "gestures",
+    "webcam",
+    "filters"
+  ],
+  "license": "MIT"
+}
