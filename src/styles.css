@@ -262,7 +262,7 @@ h1 {
     0 0 0 5px rgba(255, 255, 255, 0.45);
 }
 
-.clear-drawing {
+.control-pill {
   padding: 0.58rem 0.9rem;
   border: 0;
   border-radius: 999px;
@@ -270,6 +270,12 @@ h1 {
   color: #08080a;
   font-weight: 800;
   cursor: pointer;
+}
+
+
+.control-pill.is-active {
+  background: #34c759;
+  color: #041006;
 }
 
 .tracking-status {
