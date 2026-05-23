@@ -101,10 +101,19 @@ async function startCamera() {
 async function createHandLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
+  try {
+    return createHandLandmarkerWithDelegate(vision, "GPU");
+  } catch (error) {
+    console.warn("GPU hand tracking failed; retrying with CPU delegate.", error);
+    return createHandLandmarkerWithDelegate(vision, "CPU");
+  }
+}
+
+function createHandLandmarkerWithDelegate(vision, delegate) {
   return HandLandmarker.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: HAND_MODEL_URL,
-      delegate: "GPU"
+      delegate
     },
     numHands: 1,
     runningMode: "VIDEO",
