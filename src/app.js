@@ -20,6 +20,29 @@ const BAYER_MATRIX = [
   [3, 11, 1, 9],
   [15, 7, 13, 5]
 ];
+const HAND_CONNECTIONS = [
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 4],
+  [0, 5],
+  [5, 6],
+  [6, 7],
+  [7, 8],
+  [5, 9],
+  [9, 10],
+  [10, 11],
+  [11, 12],
+  [9, 13],
+  [13, 14],
+  [14, 15],
+  [15, 16],
+  [13, 17],
+  [17, 18],
+  [18, 19],
+  [19, 20],
+  [0, 17]
+];
 
 const video = document.querySelector("#camera");
 const canvas = document.querySelector("#feed");
@@ -91,8 +114,8 @@ async function startCamera() {
     audio: false,
     video: {
       facingMode: { ideal: "user" },
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
+      width: { ideal: 640 },
+      height: { ideal: 480 }
     }
   });
 
@@ -120,9 +143,9 @@ function createHandLandmarkerWithDelegate(vision, delegate) {
     },
     numHands: 1,
     runningMode: "VIDEO",
-    minHandDetectionConfidence: 0.55,
-    minHandPresenceConfidence: 0.55,
-    minTrackingConfidence: 0.5
+    minHandDetectionConfidence: 0.25,
+    minHandPresenceConfidence: 0.25,
+    minTrackingConfidence: 0.25
   });
 }
 
@@ -224,6 +247,10 @@ function drawScene(now) {
     : null;
 
   applyGestureFilter(activeGesture, indexTip, palmCenter, now);
+
+  if (latestLandmarks) {
+    drawHandSkeleton(latestLandmarks, coverRect);
+  }
 
   if (indexTip) {
     drawIndexDot(indexTip);
@@ -409,6 +436,39 @@ function applyWaterRipple(center, now) {
     ctx.arc(center.x, center.y, ringRadius, 0, Math.PI * 2);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+function drawHandSkeleton(landmarks, rect) {
+  const points = landmarks.map((landmark) => landmarkToCanvasPoint(landmark, rect));
+  const lineWidth = Math.max(2, Math.min(canvas.width, canvas.height) * 0.004);
+  const pointRadius = Math.max(2.5, Math.min(canvas.width, canvas.height) * 0.0045);
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = "rgba(65, 245, 255, 0.8)";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+  ctx.shadowBlur = lineWidth * 1.5;
+
+  for (const [startIndex, endIndex] of HAND_CONNECTIONS) {
+    const start = points[startIndex];
+    const end = points[endIndex];
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+  for (const point of points) {
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, pointRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.restore();
 }
 
