@@ -139,15 +139,15 @@ function isFingerExtended(landmarks, indices, palmSize) {
   const fingerLength =
     distance(mcp, pip) + distance(pip, dip) + distance(dip, tip);
   const straightness = distance(mcp, tip) / Math.max(fingerLength, 0.0001);
-  const tipAbovePip = pip.y - tip.y > palmSize * 0.08;
-  const tipAboveDip = dip.y - tip.y > palmSize * 0.04;
+  const tipAbovePip = pip.y - tip.y > palmSize * 0.03;
+  const tipAboveDip = dip.y - tip.y > palmSize * 0.015;
   const extendsBeyondKnuckle =
-    distance(wrist, tip) > distance(wrist, mcp) + palmSize * 0.1;
+    distance(wrist, tip) > distance(wrist, mcp) + palmSize * 0.06;
   const extendsBeyondMiddleJoint =
     distance(wrist, tip) > distance(wrist, pip) - palmSize * 0.02;
   const reachesAwayFromPalm = extendsBeyondKnuckle && extendsBeyondMiddleJoint;
 
-  return (tipAbovePip && tipAboveDip) || (straightness > 0.58 && reachesAwayFromPalm);
+  return (tipAbovePip && tipAboveDip) || (straightness > 0.5 && reachesAwayFromPalm);
 }
 
 function isThumbExtended(landmarks, palmSize) {
@@ -168,7 +168,7 @@ function isThumbExtended(landmarks, palmSize) {
 
 function hasVSignSeparation(landmarks) {
   const palmSize = getPalmSize(landmarks);
-  return distance(landmarks[8], landmarks[12]) > palmSize * 0.32;
+  return distance(landmarks[8], landmarks[12]) > palmSize * 0.24;
 }
 
 function getPalmSize(landmarks) {
