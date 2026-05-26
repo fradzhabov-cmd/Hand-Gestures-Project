@@ -101,6 +101,7 @@ for (const chip of colorChips) {
   chip.addEventListener("click", () => setDrawingColor(chip.dataset.color));
 }
 
+document.body.dataset.mode = activeMode;
 resizeCanvases();
 updateHud(Gesture.UNKNOWN);
 updateTrackingStatus("App v3 ready. Tap Start selfie camera.");
@@ -863,6 +864,7 @@ function syncScratchCanvas() {
 
 function setMode(mode) {
   activeMode = mode === "drawing" ? "drawing" : "filters";
+  document.body.dataset.mode = activeMode;
   lastDrawPoint = null;
   lastErasePoint = null;
 

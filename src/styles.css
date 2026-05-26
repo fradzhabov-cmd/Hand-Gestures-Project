@@ -223,12 +223,14 @@ h1 {
   left: 50%;
   bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 6.8rem);
   right: auto;
-  width: min(34rem, calc(100vw - 2rem));
+  width: min(34rem, calc(100vw - 0.75rem));
   align-items: center;
   justify-content: center;
-  padding: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.45rem;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
+  border-radius: 1.35rem;
   background: rgba(5, 5, 5, 0.5);
   box-shadow: 0 0.85rem 2.5rem rgba(0, 0, 0, 0.22);
   transform: translateX(-50%);
@@ -242,12 +244,15 @@ h1 {
 
 .color-palette {
   display: flex;
-  gap: 0.42rem;
+  flex: 1 0 100%;
+  justify-content: center;
+  gap: clamp(0.28rem, 1.8vw, 0.42rem);
 }
 
 .color-chip {
-  width: 2.1rem;
-  height: 2.1rem;
+  width: clamp(1.82rem, 8.2vw, 2.1rem);
+  height: clamp(1.82rem, 8.2vw, 2.1rem);
+  flex: 0 0 auto;
   border: 2px solid rgba(255, 255, 255, 0.58);
   border-radius: 50%;
   background: var(--chip-color);
@@ -263,15 +268,17 @@ h1 {
 }
 
 .control-pill {
-  padding: 0.58rem 0.9rem;
+  flex: 1 1 7rem;
+  min-width: 0;
+  padding: 0.58rem 0.75rem;
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   color: #08080a;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
-
 
 .control-pill.is-active {
   background: #34c759;
@@ -308,6 +315,32 @@ h1 {
   padding: 0.5rem 0.68rem;
   color: rgba(255, 255, 255, 0.8);
   font-size: clamp(0.68rem, 3vw, 0.82rem);
+}
+
+
+body[data-mode="drawing"] .tracking-status {
+  bottom: max(0.7rem, env(safe-area-inset-bottom));
+  width: min(34rem, calc(100vw - 0.75rem));
+}
+
+body[data-mode="drawing"] .draw-controls {
+  bottom: calc(max(0.7rem, env(safe-area-inset-bottom)) + 4.45rem);
+}
+
+body[data-mode="drawing"] .legend {
+  display: none;
+}
+
+@media (max-width: 380px) {
+  .draw-controls {
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 6.1rem);
+  }
+
+  .control-pill {
+    flex-basis: 6.2rem;
+    padding-inline: 0.55rem;
+    font-size: 0.88rem;
+  }
 }
 
 @media (orientation: landscape) and (max-height: 560px) {
